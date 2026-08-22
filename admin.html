@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TAVLIXO Admin</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      color: #171717;
+    }
+
+    header {
+      background: #111;
+      color: #e4b62c;
+      padding: 20px 30px;
+      font-size: 26px;
+      font-weight: bold;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 30px auto;
+      padding: 20px;
+    }
+
+    .card {
+      border-radius: 18px;
+      padding: 25px;
+      box-shadow: 0 5px 20px rgba(0,0,0,.08);
+      margin-bottom: 25px;
+    }
+
+    h1, h2 {
+      margin-top: 0;
+    }
+
+    label {
+      display: block;
+      margin-top: 15px;
+      margin-bottom: 6px;
+      font-weight: bold;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      font-size: 16px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 13px 20px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    .add {
+      margin-top: 20px;
+      background: #e4b62c;
+      color: #111;
+      font-weight: bold;
+      width: 100%;
+    }
+
+    .product {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      border-top: 1px solid #eee;
+      padding: 15px 0;
+    }
+
+    .product img {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 10px;
+      background: #eee;
+    }
+
+    .product-info {
+      flex: 1;
+    }
+
+    .delete {
+      background: #111;
+      color: white;
+    }
+
+    #message {
+      margin-top: 15px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  TAVLIXO — ADMIN PANEL
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <h1>➕ Mahsulot qo‘shish</h1>
+
+    <label>Mahsulot nomi</label>
+    <input id="name" placeholder="Masalan: Wireless quloqchin">
+
+    <label>Narxi (so‘m)</label>
+    <input id="price" type="number" placeholder="350000">
+
+    <label>Davlat</label>
+    <select id="country">
+      <option>Xitoy</option>
+      <option>Koreya</option>
+      <option>AQSh</option>
+      <option>Turkiya</option>
+      <option>BAA</option>
+      <option>Germaniya</option>
+    </select>
+
+    <label>Kategoriya</label>
+    <select id="category">
+      <option>Elektronika</option>
+      <option>Kiyim</option>
+      <option>Oyoq kiyim</option>
+      <option>Soat</option>
+      <option>Aksessuar</option>
+    </select>
+
+    <label>Mahsulot rasmi</label>
+<input id="imageFile" type="file" accept="image/*">
+
+    <button class="add" onclick="addProduct()">
+      Mahsulotni qo‘shish
+    </button>
+
+    <div id="message"></div>
+  </div>
+
+  <div class="card">
+    <h2>📦 Mahsulotlar</h2>
+    <div id="products"></div>
+  </div>
+<div class="card">
+    <h2>📋 Buyurtmalar</h2>
+    <div id="orders"></div>
+  </div>
+</div>
+
+<script>
+
+async function loadProducts() {
+
+  const response = await fetch("/api/products");
+  const products = await response.json();
+
+  const box = document.getElementById("products");
+
+  if (products.length === 0) {
+    box.innerHTML = "<p>Hozircha mahsulot yo‘q.</p>";
+    return;
+  }
+
+  box.innerHTML = products.map(product => `
+
+    <div class="product">
+
+      <img src="${product.image || ""}">
+
+      <div class="product-info">
+        <b>${product.name}</b>
+        <br>
+        ${Number(product.price).toLocaleString()} so‘m
+        <br>
+        🌍 ${product.country}
+        · ${product.category}
+      </div>
+
+      <button
+        class="delete"
+        onclick="deleteProduct(${product.id})">
+        O‘chirish
+      </button>
+
+    </div>
+
+  `).join("");
+}
+
+
+async function addProduct() {
+
+  const name = document.getElementById("name").value.trim();
+  const price = document.getElementById("price").value;
+  const country = document.getElementById("country").value;
+  const category = document.getElementById("category").value;
+  const imageFile = document.getElementById("imageFile").files[0];
+
+
+  if (!name || !price) {
+    showMessage("Mahsulot nomi va narxini kiriting.");
+    return;
+  }
+
+  if (!imageFile) {
+    showMessage("Mahsulot rasmini tanlang.");
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = async function () {
+
+    const image = reader.result;
+
+    try {
+
+      const response = await fetch("/api/products", {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json"
+        },
+
+        body: JSON.stringify({
+          name,
+          price,
+          country,
+          category,
+          image
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+
+        showMessage("✅ Mahsulot qo‘shildi!");
+
+        document.getElementById("name").value = "";
+        document.getElementById("price").value = "";
+        document.getElementById("imageFile").value = "";
+        
+
+        loadProducts();
+
+      } else {
+
+        showMessage("❌ Mahsulot qo‘shilmadi.");
+
+      }
+
+    } catch (error) {
+
+      console.error(error);
+      showMessage("❌ Server bilan aloqa yo‘q.");  
+
+    }
+
+  };
+
+  reader.readAsDataURL(imageFile);
+}
+window.addProduct = addProduct;
+loadProducts();
+
+
+async function loadOrders() {
+  const response = await fetch("/api/orders");
+  const orders = await response.json();
+
+  console.log("Buyurtmalar:", orders);
+}
+
+
+async function showOrders() {
+
+  const response = await fetch("/api/orders");
+  const orders = await response.json();
+
+  const box = document.getElementById("orders");
+
+  if (orders.length === 0) {
+    box.innerHTML = "<p>Hozircha buyurtmalar yo‘q.</p>";
+    return;
+  }
+
+  box.innerHTML = orders.map(order => {
+
+    const products = (order.products || []).map(product => `
+      <div style="
+        background:#f5f5f5;
+        padding:10px;
+        margin:8px 0;
+        border-radius:8px;
+      ">
+        🛍️ <b>${product.n || product.name || "Mahsulot"}</b>
+        × ${product.q || 1}
+      </div>
+    `).join("");
+
+    return `
+      <div style="
+        border:1px solid #ddd;
+        border-radius:15px;
+        padding:20px;
+        margin-bottom:15px;
+        background:white;
+      ">
+
+        <h3>👤 ${order.name}</h3>
+
+        <p>📞 <b>${order.phone}</b></p>
+
+        <p>📍 ${order.address}</p>
+
+        <p><b>🛍️ Mahsulot:</b></p>
+
+        ${products}
+
+        <p>
+          💰 <b>${Number(order.total).toLocaleString()} so‘m</b>
+        </p>
+
+        <p>
+          🟡 Status:
+          <b>${order.status}</b>
+        </p>
+
+        <p>🕐 ${order.createdAt}</p>
+
+        <button
+          onclick="updateOrderStatus(${order.id}, 'Qabul qilindi')"
+          style="
+            background:#e4b62c;
+            color:#111;
+            border:0;
+            padding:10px 15px;
+            border-radius:8px;
+            cursor:pointer;
+            font-weight:bold;
+          ">
+          ✅ Qabul qilish
+        </button>
+
+        <button
+          onclick="updateOrderStatus(${order.id}, 'Bekor qilindi')"
+          style="
+            background:#111;
+            color:white;
+            border:0;
+            padding:10px 15px;
+            border-radius:8px;
+            cursor:pointer;
+            margin-left:8px;
+          ">
+          ❌ Bekor qilish
+        </button>
+
+      </div>
+    `;
+  }).join("");
+}
+
+
+async function updateOrderStatus(id, status) {
+
+  const response = await fetch(`/api/orders/${id}`, {
+    method: "PUT",
+
+    headers: {
+      "Content-Type": "application/json"
+    },
+
+    body: JSON.stringify({
+      status: status
+    })
+  });
+
+  const result = await response.json();
+
+  if (result.success) {
+    showOrders();
+  } else {
+    alert("Statusni o‘zgartirib bo‘lmadi.");
+  }
+}
+
+
+showOrders();
+
+</script>
+</body>
+</html>

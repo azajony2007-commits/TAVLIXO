@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TAVLIXO — Marketplace V3</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f5f3;color:#151515;font-family:Arial,sans-serif}header{position:sticky;top:0;z-index:10;background:#0b0b0b;color:#fff;padding:12px 5%;display:flex;align-items:center;gap:12px}.logo{font-size:24px;font-weight:900;letter-spacing:2px;color:#d7ad39}.search{flex:1;max-width:600px}.search input{width:100%;padding:12px 16px;border:0;border-radius:25px;font-size:15px}.btn{border:0;border-radius:10px;padding:11px 15px;background:#d7ad39;cursor:pointer;font-weight:700}.light{background:white;border:1px solid #ddd}.hero{max-width:1200px;margin:20px auto;padding:45px 7%;border-radius:25px;background:linear-gradient(120deg,#090909,#302612);color:white}.gold{color:#d7ad39}.hero h1{font-size:clamp(32px,6vw,58px);margin:10px 0}.hero p{font-size:18px;line-height:1.5;max-width:680px}.wrap{max-width:1200px;margin:auto;padding:0 18px}.title{display:flex;justify-content:space-between;align-items:center;margin-top:30px}.cats{display:flex;gap:10px;overflow:auto}.cat{white-space:nowrap;padding:12px 16px;border:1px solid #ddd;background:#fff;border-radius:12px;cursor:pointer}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px;margin-top:15px}.card{background:#fff;border-radius:17px;padding:12px;box-shadow:0 4px 18px #00000012}.pic{height:175px;border-radius:13px;background:#f0f0ee;display:flex;align-items:center;justify-content:center;overflow:hidden}.pic img{width:100%;height:100%;object-fit:cover}.emoji{font-size:70px}.country{font-size:12px;color:#777;margin-top:10px}.name{font-weight:700;margin:7px 0}.price{font-size:20px;font-weight:900}.add{width:100%;margin-top:10px;border:0;border-radius:9px;padding:11px;background:#111;color:#fff;cursor:pointer}.admin,.cartPage{display:none;max-width:900px;margin:25px auto;padding:18px}.panel{background:#fff;border-radius:18px;padding:20px;box-shadow:0 4px 18px #0001}.panel input,.panel select{width:100%;padding:12px;margin:6px 0 12px;border:1px solid #ddd;border-radius:9px}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.preview{width:100%;height:180px;border-radius:12px;background:#f0f0ee;object-fit:contain;margin:5px 0 15px}.item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #eee}.danger{background:#c0392b;color:white;border:0;border-radius:8px;padding:8px;cursor:pointer}.cartLine{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid #eee}.qty{display:flex;align-items:center;gap:8px}.qty button{border:1px solid #ddd;background:#fff;border-radius:7px;padding:5px 9px}footer{margin-top:45px;padding:30px;text-align:center;background:#0b0b0b;color:#aaa}@media(max-width:600px){header{padding:10px}.logo{font-size:18px}.hero{margin:10px;padding:30px 22px}.grid{grid-template-columns:1fr 1fr}.pic{height:140px}.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">TAVLIXO</div>
+
+  <div class="search">
+    <input id="search" placeholder="Mahsulot qidiring...">
+  </div>
+
+  <button class="btn" onclick="openCart()">
+    🛒 <span id="count">0</span>
+  </button>
+
+  <button class="btn" onclick="openOrders()">
+    📦 Buyurtmalar
+  </button>
+
+  <button class="btn" onclick="toggleAdmin()">
+    ⚙️
+  </button>
+</header>
+
+<main id="shop"><section class="hero"><div class="gold">TAVLIXO MARKETPLACE</div><h1>Dunyoning mahsulotlari — bir joyda.</h1><p>Xitoy, Koreya, AQSh, Turkiya va boshqa davlatlardan mahsulotlarni toping va buyurtma bering.</p><button class="btn" onclick="document.getElementById('products').scrollIntoView()">Xarid qilish</button></section>
+<div class="wrap"><div class="title"><h2>Kategoriyalar</h2></div><div class="cats" id="cats"></div><div class="title" id="products"><h2>Mashhur mahsulotlar</h2><button class="cat" onclick="render()">Barchasi</button></div><div class="grid" id="grid"></div></div></main>
+
+<section class="cartPage" id="cartPage"><div class="panel"><div class="title"><h2>🛒 Savatcha</h2><button class="cat" onclick="closeCart()">← Do‘konga</button></div><div id="cartList"></div><h2 id="total"></h2><button class="btn" onclick="checkout()">📦 Buyurtma berish</button></div></section>
+<section class="cartPage" id="ordersPage">
+
+  <div class="panel">
+
+    <div class="title">
+      <h2>📦 Mening buyurtmam</h2>
+
+      <button class="cat" onclick="closeOrders()">
+        ← Do‘konga
+      </button>
+    </div>
+
+    <div id="myOrder">
+      <p>📭 Hozircha buyurtma yo‘q.</p>
+    </div>
+
+  </div>
+
+</section>
+<section class="admin" id="admin"><div class="panel"><h2>⚙️ TAVLIXO Admin Panel</h2><p>Mahsulot qo‘shing. Rasm telefon galereyasidan tanlanadi.</p>
+<label>Mahsulot rasmi</label><input id="photo" type="file" accept="image/*" onchange="previewImage(event)"><img id="preview" class="preview" style="display:none">
+<label>Mahsulot nomi</label><input id="pn" placeholder="Masalan: Smart soat">
+<div class="row"><div><label>Narxi (so‘m)</label><input id="pp" type="number" placeholder="500000"></div><div><label>Davlat</label><select id="pc"><option>🇨🇳 Xitoy</option><option>🇰🇷 Koreya</option><option>🇺🇸 AQSh</option><option>🇹🇷 Turkiya</option><option>🇷🇺 Rossiya</option></select></div></div>
+<div class="row"><div><label>Kategoriya</label><select id="pk"><option>Elektronika</option><option>Kiyim</option><option>Oyoq kiyim</option><option>Aksessuar</option><option>Soat</option></select></div><div><label>Emoji (rasmsiz bo‘lsa)</label><input id="pi" placeholder="⌚"></div></div>
+<button class="btn" onclick="addProduct()">+ Mahsulot qo‘shish</button> <button class="cat" onclick="toggleAdmin()">Do‘konga qaytish</button><hr><h3>Mahsulotlar boshqaruvi</h3><div id="manage"></div></div></section>
+<footer>TAVLIXO © 2026 · Dunyodan siz uchun</footer>
+
+<script>
+const starter=[
+{id:1,n:"Wireless quloqchin",p:350000,c:"🇨🇳 Xitoy",k:"Elektronika",i:"🎧"},
+{id:2,n:"Smartfon",p:3150000,c:"🇨🇳 Xitoy",k:"Elektronika",i:"📱"},
+{id:3,n:"Sport krossovka",p:1250000,c:"🇺🇸 AQSh",k:"Oyoq kiyim",i:"👟"},
+{id:4,n:"Premium soat",p:890000,c:"🇰🇷 Koreya",k:"Soat",i:"⌚"},
+{id:5,n:"Kundalik ryukzak",p:420000,c:"🇹🇷 Turkiya",k:"Aksessuar",i:"🎒"},
+{id:6,n:"Oversize futbolka",p:290000,c:"🇹🇷 Turkiya",k:"Kiyim",i:"👕"}];
+let products = [];
+
+async function loadProducts() {
+  try {
+    const response = await fetch("/api/products");
+    const data = await response.json();
+
+products = data.map(x => ({
+  id: x.id,
+  n: x.name,
+  p: Number(x.price),
+  c: x.country,
+  k: x.category,
+  i: "🛍️",
+  img: x.image || ""
+}));
+
+    cats();
+    render();
+
+  } catch (error) {
+    console.error(error);
+    alert("Mahsulotlarni yuklashda xatolik!");
+  }
+}
+let cart=JSON.parse(localStorage.getItem("tavlixo_cart")||"[]");
+let newImage="";
+const money=n=>new Intl.NumberFormat("uz-UZ").format(n)+" so‘m";
+const save=()=>{localStorage.setItem("tavlixo_products",JSON.stringify(products));localStorage.setItem("tavlixo_cart",JSON.stringify(cart))};
+function render(list=products){let q=document.getElementById("search").value.toLowerCase();list=list.filter(x=>(x.n+" "+x.k+" "+x.c).toLowerCase().includes(q));document.getElementById("grid").innerHTML=list.map(x=>`<article class="card"><div class="pic">${x.img?`<img src="${x.img}">`:`<span class="emoji">${x.i||"🛍️"}</span>`}</div><div class="country">${x.c}</div><div class="name">${x.n}</div><div class="price">${money(x.p)}</div><button class="add" onclick="addCart(${x.id})">Savatchaga qo‘shish</button></article>`).join("")||"<p>Mahsulot topilmadi.</p>"}
+function cats(){let a=["Barchasi",...new Set(products.map(x=>x.k))];document.getElementById("cats").innerHTML=a.map(x=>`<button class="cat" onclick="cat('${x}')">${x}</button>`).join("")}
+function cat(k){render(k==="Barchasi"?products:products.filter(x=>x.k===k))}
+function addCart(id){let x=products.find(x=>x.id===id),q=cart.find(x=>x.id===id);q?q.q++:cart.push({...x,q:1});save();updateCount();alert("Mahsulot savatchaga qo‘shildi!")}
+function updateCount(){document.getElementById("count").textContent=cart.reduce((s,x)=>s+x.q,0)}
+function openCart(){document.getElementById("shop").style.display="none";document.getElementById("admin").style.display="none";document.getElementById("cartPage").style.display="block";renderCart()}
+function closeCart(){document.getElementById("cartPage").style.display="none";document.getElementById("shop").style.display="block"}
+function openOrders() {
+  document.getElementById("shop").style.display = "none";
+  document.getElementById("admin").style.display = "none";
+  document.getElementById("cartPage").style.display = "none";
+  document.getElementById("ordersPage").style.display = "block";
+
+  loadMyOrders();
+}
+
+function closeOrders() {
+  document.getElementById("ordersPage").style.display = "none";
+  document.getElementById("shop").style.display = "block";
+}
+
+
+async function loadMyOrders() {
+  const box = document.getElementById("myOrder");
+
+  try {
+    const response = await fetch("/api/orders");
+    const orders = await response.json();
+
+    if (!orders.length) {
+      box.innerHTML = "<p>📭 Hozircha buyurtma yo‘q.</p>";
+      return;
+    }
+
+    box.innerHTML = orders.map(order => `
+      <div style="
+        border:1px solid #ddd;
+        border-radius:15px;
+        padding:18px;
+        margin-bottom:15px;
+      ">
+        <h3>👤 ${order.name}</h3>
+
+        <p>📞 ${order.phone}</p>
+
+        <p>📍 ${order.address}</p>
+
+        <p>🛍️ Mahsulotlar:</p>
+
+        ${(order.products || []).map(product => `
+          <div style="
+            background:#f5f5f5;
+            padding:10px;
+            margin:5px 0;
+            border-radius:8px;
+          ">
+            ${product.i || "🛍️"}
+            <b>${product.n || product.name}</b>
+            × ${product.q || 1}
+          </div>
+        `).join("")}
+
+        <p>
+          💰 <b>${Number(order.total).toLocaleString()} so‘m</b>
+        </p>
+
+        <p>
+          🟡 Status:
+          <b>${order.status}</b>
+        </p>
+
+        <p>🕐 ${order.createdAt}</p>
+      </div>
+    `).join("");
+
+  } catch (error) {
+    console.error(error);
+    box.innerHTML = "<p>❌ Buyurtmalarni yuklashda xatolik.</p>";
+  }
+}
+function renderCart(){let box=document.getElementById("cartList");if(!cart.length){box.innerHTML="<p>Savatcha bo‘sh.</p>";document.getElementById("total").textContent="Jami: 0 so‘m";return}box.innerHTML=cart.map(x=>`<div class="cartLine"><span>${x.img?`<img src="${x.img}" style="width:45px;height:45px;object-fit:cover;border-radius:8px">`:(x.i||"🛍️")} ${x.n}</span><span class="qty"><button onclick="changeQty(${x.id},-1)">−</button>${x.q}<button onclick="changeQty(${x.id},1)">+</button><button class="danger" onclick="removeCart(${x.id})">×</button></span><b>${money(x.p*x.q)}</b></div>`).join("");document.getElementById("total").textContent="Jami: "+money(cart.reduce((s,x)=>s+x.p*x.q,0))}
+function changeQty(id,d){let x=cart.find(x=>x.id===id);if(!x)return;x.q+=d;if(x.q<=0)cart=cart.filter(y=>y.id!==id);save();updateCount();renderCart()}
+function removeCart(id){cart=cart.filter(x=>x.id!==id);save();updateCount();renderCart()}
+async function checkout() {
+
+  if (!cart.length) {
+    return alert("Savatcha bo‘sh.");
+  }
+
+  const name = prompt("Ismingiz:");
+  if (!name) return;
+
+  const phone = prompt("Telefon raqamingiz:");
+  if (!phone) return;
+
+  const address = prompt("Manzilingiz:");
+  if (!address) return;
+
+  const total = cart.reduce((sum, item) => {
+    return sum + Number(item.p || 0) * Number(item.q || 1);
+  }, 0);
+
+  try {
+
+    const response = await fetch("/api/orders", {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify({
+        name,
+        phone,
+        address,
+        products: cart,
+        total
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      localStorage.setItem(
+  "tavlixo_order_id",
+  result.order.id
+);
+
+      alert(
+        "Buyurtma qabul qilindi!\n" +
+        "Mijoz: " + name + "\n" +
+        "Telefon: " + phone + "\n" +
+        "Manzil: " + address
+      );
+
+      cart = [];
+      save();
+      updateCount();
+      renderCart();
+
+    } else {
+
+      alert("Buyurtma yuborilmadi.");
+
+    }
+
+  } catch (error) {
+
+    console.error(error);
+    alert("Server bilan aloqa yo‘q.");
+
+  }
+}
+function toggleAdmin(){let a=document.getElementById("admin"),s=document.getElementById("shop"),c=document.getElementById("cartPage");c.style.display="none";let show=a.style.display!=="block";a.style.display=show?"block":"none";s.style.display=show?"none":"block";if(show)manage()}
+function previewImage(e){let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{newImage=r.result;let p=document.getElementById("preview");p.src=newImage;p.style.display="block"};r.readAsDataURL(f)}
+async function addProduct() {
+
+  const name = document.getElementById("pn").value.trim();
+  const price = Number(document.getElementById("pp").value);
+  const country = document.getElementById("pc").value;
+  const category = document.getElementById("pk").value;
+
+  if (!name || !price) {
+    alert("Nom va narxni kiriting.");
+    return;
+  }
+
+  try {
+
+    const response = await fetch("/api/products", {
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify({
+        name: name,
+        price: price,
+        country: country,
+        category: category,
+        image: newImage || ""
+      })
+    });
+
+    const result = await response.json();
+
+    if (!result.success) {
+      alert("❌ Mahsulot qo‘shilmadi.");
+      return;
+    }
+
+    alert("✅ Mahsulot serverga qo‘shildi!");
+
+    document.getElementById("pn").value = "";
+    document.getElementById("pp").value = "";
+    document.getElementById("pi").value = "";
+    document.getElementById("photo").value = "";
+    document.getElementById("preview").style.display = "none";
+
+    newImage = "";
+
+    await loadProducts();
+
+    manage();
+
+  } catch (error) {
+
+    console.error(error);
+    alert("❌ Server bilan aloqa yo‘q.");
+
+  }
+}
+async function removeProduct(id) {
+
+  if (!confirm("Bu mahsulotni o‘chirmoqchimisiz?")) {
+    return;
+  }
+
+  try {
+
+    const response = await fetch(`/api/products/${id}`, {
+      method: "DELETE"
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+
+      alert("✅ Mahsulot o‘chirildi!");
+
+      await loadProducts();
+      manage();
+
+    } else {
+
+      alert("❌ Mahsulot topilmadi.");
+
+    }
+
+  } catch (error) {
+
+    console.error(error);
+    alert("❌ Server bilan aloqa yo‘q.");
+
+  }
+}
+function manage(){
+  document.getElementById("manage").innerHTML=products.map(x=>`<div class="item"><span>${x.img?`<img src="${x.img}" style="width:48px;height:48px;object-fit:cover;border-radius:8px">`:(x.i||"🛍️")} ${x.n} — ${money(x.p)}</span><button class="danger" onclick="removeProduct(${x.id})">O‘chirish</button></div>`).join("")
+}
+
+document.getElementById("search").oninput=()=>render();
+updateCount();
+cats();
+render();
+
+loadProducts();
+
+</script>
+</body>
+</html>
