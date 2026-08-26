@@ -1,25 +1,56 @@
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
-const PORT = 3000;
-
-const DATA_FILE = path.join(__dirname, "products.json");
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.static(__dirname));
 
-function getProducts() {
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, "[]");
+// =====================================================
+// FILES
+// =====================================================
+
+const DATA_FILE = path.join(__dirname, "products.json");
+const ORDERS_FILE = path.join(__dirname, "orders.json");
+const USERS_FILE = path.join(__dirname, "users.json");
+const SESSIONS_FILE = path.join(__dirname, "sessions.json");
+
+// =====================================================
+// GENERIC JSON HELPERS
+// =====================================================
+
+function readJSON(file) {
+  if (!fs.existsSync(file)) {
+    fs.writeFileSync(file, "[]");
   }
 
-  return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+function writeJSON(file, data) {
+  fs.writeFileSync(
+    file,
+    JSON.stringify(data, null, 2)
+  );
+}
+
+// =====================================================
+// PRODUCTS
+// =====================================================
+
+function getProducts() {
+  return readJSON(DATA_FILE);
 }
 
 function saveProducts(products) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(products, null, 2));
+  writeJSON(DATA_FILE, products);
 }
 
 // Barcha mahsulotlar
@@ -59,29 +90,305 @@ app.delete("/api/products/:id", (req, res) => {
 
   saveProducts(products);
 
-  res.json({ success: true });
+  res.json({
+    success: true
+  });
 });
-// ===============================
-// BUYURTMALAR
-// ===============================
 
-const ORDERS_FILE = path.join(__dirname, "orders.json");
+// =====================================================
+// USERS / ACCOUNT
+// =====================================================
 
-function getOrders() {
-  if (!fs.existsSync(ORDERS_FILE)) {
-    fs.writeFileSync(ORDERS_FILE, "[]");
+function getUsers() {
+  return readJSON(USERS_FILE);
+}
+
+function saveUsers(users) {
+  writeJSON(USERS_FILE, users);
+}
+
+function getSessions() {
+  return readJSON(SESSIONS_FILE);
+}
+
+function saveSessions(sessions) {
+  writeJSON(SESSIONS_FILE, sessions);
+}
+
+// Parolni hash qilish
+function hashPassword(password) {
+  return crypto
+    .createHash("sha256")
+    .update(password)
+    .digest("hex");
+}
+
+// Token yaratish
+function createToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+// Authorization orqali foydalanuvchini topish
+function getUserFromRequest(req) {
+  const auth = req.headers.authorization;
+
+  if (!auth || !auth.startsWith("Bearer ")) {
+    return null;
   }
 
-  return JSON.parse(
-    fs.readFileSync(ORDERS_FILE, "utf8")
+  const token = auth.replace("Bearer ", "").trim();
+
+  const sessions = getSessions();
+  const session = sessions.find(
+    item => item.token === token
   );
+
+  if (!session) {
+    return null;
+  }
+
+  const users = getUsers();
+
+  return users.find(
+    user => user.id === session.userId
+  ) || null;
+}
+
+// =====================================================
+// REGISTER
+// =====================================================
+
+app.post("/api/register", (req, res) => {
+
+  const {
+    name,
+    surname,
+    phone,
+    address,
+    email,
+    age,
+    password
+  } = req.body;
+
+  if (
+    !name ||
+    !surname ||
+    !phone ||
+    !address ||
+    !email ||
+    !age ||
+    !password
+  ) {
+    return res.status(400).json({
+      success: false,
+      message: "Barcha ma'lumotlarni kiriting"
+    });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({
+      success: false,
+      message: "Parol kamida 6 ta belgidan iborat bo‘lsin"
+    });
+  }
+
+  const users = getUsers();
+
+  const exists = users.find(
+    user =>
+      user.email.toLowerCase() ===
+      email.toLowerCase()
+  );
+
+  if (exists) {
+    return res.status(400).json({
+      success: false,
+      message: "Bu email bilan akkaunt mavjud"
+    });
+  }
+
+  const user = {
+    id: Date.now(),
+    name,
+    surname,
+    phone,
+    address,
+    email,
+    age: Number(age),
+    passwordHash: hashPassword(password),
+    createdAt: new Date().toISOString()
+  };
+
+  users.push(user);
+  saveUsers(users);
+
+  const token = createToken();
+
+  const sessions = getSessions();
+
+  sessions.push({
+    token,
+    userId: user.id
+  });
+
+  saveSessions(sessions);
+
+  const safeUser = {
+    id: user.id,
+    name: user.name,
+    surname: user.surname,
+    phone: user.phone,
+    address: user.address,
+    email: user.email,
+    age: user.age
+  };
+
+  res.json({
+    success: true,
+    token,
+    user: safeUser
+  });
+});
+
+// =====================================================
+// LOGIN
+// =====================================================
+
+app.post("/api/login", (req, res) => {
+
+  const {
+    email,
+    password
+  } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: "Email va parolni kiriting"
+    });
+  }
+
+  const users = getUsers();
+
+  const user = users.find(
+    item =>
+      item.email.toLowerCase() ===
+      email.toLowerCase()
+  );
+
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "Email yoki parol noto‘g‘ri"
+    });
+  }
+
+  if (
+    user.passwordHash !==
+    hashPassword(password)
+  ) {
+    return res.status(401).json({
+      success: false,
+      message: "Email yoki parol noto‘g‘ri"
+    });
+  }
+
+  const token = createToken();
+
+  const sessions = getSessions();
+
+  sessions.push({
+    token,
+    userId: user.id
+  });
+
+  saveSessions(sessions);
+
+  const safeUser = {
+    id: user.id,
+    name: user.name,
+    surname: user.surname,
+    phone: user.phone,
+    address: user.address,
+    email: user.email,
+    age: user.age
+  };
+
+  res.json({
+    success: true,
+    token,
+    user: safeUser
+  });
+});
+
+// =====================================================
+// CURRENT USER
+// =====================================================
+
+app.get("/api/me", (req, res) => {
+
+  const user = getUserFromRequest(req);
+
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "Akkauntga kirilmagan"
+    });
+  }
+
+  res.json({
+    success: true,
+    user: {
+      id: user.id,
+      name: user.name,
+      surname: user.surname,
+      phone: user.phone,
+      address: user.address,
+      email: user.email,
+      age: user.age
+    }
+  });
+});
+
+// =====================================================
+// LOGOUT
+// =====================================================
+
+app.post("/api/logout", (req, res) => {
+
+  const auth = req.headers.authorization;
+
+  if (!auth || !auth.startsWith("Bearer ")) {
+    return res.json({
+      success: true
+    });
+  }
+
+  const token = auth.replace("Bearer ", "").trim();
+
+  let sessions = getSessions();
+
+  sessions = sessions.filter(
+    item => item.token !== token
+  );
+
+  saveSessions(sessions);
+
+  res.json({
+    success: true
+  });
+});
+
+// =====================================================
+// ORDERS
+// =====================================================
+
+function getOrders() {
+  return readJSON(ORDERS_FILE);
 }
 
 function saveOrders(orders) {
-  fs.writeFileSync(
-    ORDERS_FILE,
-    JSON.stringify(orders, null, 2)
-  );
+  writeJSON(ORDERS_FILE, orders);
 }
 
 // Buyurtma qabul qilish
@@ -89,14 +396,31 @@ app.post("/api/orders", (req, res) => {
 
   const orders = getOrders();
 
+  const user = getUserFromRequest(req);
+
   const order = {
     id: Date.now(),
-    name: req.body.name,
-    phone: req.body.phone,
-    address: req.body.address,
+
+    userId: user ? user.id : null,
+
+    name: user
+      ? `${user.name} ${user.surname}`
+      : req.body.name,
+
+    phone: user
+      ? user.phone
+      : req.body.phone,
+
+    address: user
+      ? user.address
+      : req.body.address,
+
     products: req.body.products,
+
     total: Number(req.body.total),
+
     status: "Yangi",
+
     createdAt: new Date().toLocaleString("uz-UZ")
   };
 
@@ -110,10 +434,35 @@ app.post("/api/orders", (req, res) => {
   });
 });
 
+// Foydalanuvchining buyurtmalari
+app.get("/api/my-orders", (req, res) => {
+
+  const user = getUserFromRequest(req);
+
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      message: "Avval akkauntga kiring"
+    });
+  }
+
+  const orders = getOrders();
+
+  const myOrders = orders.filter(
+    order => order.userId === user.id
+  );
+
+  res.json({
+    success: true,
+    orders: myOrders
+  });
+});
+
 // Barcha buyurtmalar
 app.get("/api/orders", (req, res) => {
   res.json(getOrders());
 });
+
 // Bitta buyurtmani olish
 app.get("/api/orders/:id", (req, res) => {
 
@@ -121,7 +470,9 @@ app.get("/api/orders/:id", (req, res) => {
 
   const id = Number(req.params.id);
 
-  const order = orders.find(order => order.id === id);
+  const order = orders.find(
+    order => order.id === id
+  );
 
   if (!order) {
     return res.status(404).json({
@@ -136,7 +487,7 @@ app.get("/api/orders/:id", (req, res) => {
   });
 });
 
-// Buyurtma statusini o'zgartirish
+// Buyurtma statusini o‘zgartirish
 app.put("/api/orders/:id", (req, res) => {
 
   let orders = getOrders();
@@ -144,7 +495,9 @@ app.put("/api/orders/:id", (req, res) => {
   const id = Number(req.params.id);
   const status = req.body.status;
 
-  const order = orders.find(order => order.id === id);
+  const order = orders.find(
+    order => order.id === id
+  );
 
   if (!order) {
     return res.json({
@@ -163,8 +516,12 @@ app.put("/api/orders/:id", (req, res) => {
   });
 });
 
+// =====================================================
+// SERVER
+// =====================================================
 
-// Server
 app.listen(PORT, () => {
-  console.log(`TAVLIXO serveri ishga tushdi: http://localhost:${PORT}`);
+  console.log(
+    `TAVLIXO serveri ishga tushdi: http://localhost:${PORT}`
+  );
 });
