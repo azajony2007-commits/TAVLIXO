@@ -52,56 +52,119 @@ function writeJSON(file, data) {
 // PRODUCTS
 // =====================================================
 
-function getProducts() {
-  return readJSON(DATA_FILE);
+async function getProducts() {
+  const result = await pool.query(
+    `SELECT *
+     FROM products
+     ORDER BY id DESC`
+  );
+
+  return result.rows;
 }
 
-function saveProducts(products) {
-  writeJSON(DATA_FILE, products);
+async function getProductById(id) {
+  const result = await pool.query(
+    `SELECT *
+     FROM products
+     WHERE id = $1`,
+    [id]
+  );
+
+  return result.rows[0] || null;
 }
 
 // Barcha mahsulotlar
-app.get("/api/products", (req, res) => {
-  res.json(getProducts());
+app.get("/api/products", async (req, res) => {
+  try {
+    const products = await getProducts();
+
+    res.json(products);
+  } catch (error) {
+    console.error("❌ Products olish xatosi:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Mahsulotlarni olishda server xatosi"
+    });
+  }
 });
+
 
 // Mahsulot qo‘shish
-app.post("/api/products", (req, res) => {
-  const products = getProducts();
+app.post("/api/products", async (req, res) => {
+  try {
+    const product = {
+      id: Date.now(),
+      name: req.body.name,
+      price: Number(req.body.price),
+      country: req.body.country,
+      category: req.body.category,
+      image: req.body.image
+    };
 
-  const product = {
-    id: Date.now(),
-    name: req.body.name,
-    price: Number(req.body.price),
-    country: req.body.country,
-    category: req.body.category,
-    image: req.body.image
-  };
+    await pool.query(
+      `INSERT INTO products
+        (id, name, price, country, category, image)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        product.id,
+        product.name,
+        product.price,
+        product.country,
+        product.category,
+        product.image
+      ]
+    );
 
-  products.push(product);
-  saveProducts(products);
+    res.json({
+      success: true,
+      product
+    });
 
-  res.json({
-    success: true,
-    product
-  });
+  } catch (error) {
+    console.error("❌ Product qo‘shish xatosi:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Mahsulot qo‘shishda server xatosi"
+    });
+  }
 });
+
 
 // Mahsulot o‘chirish
-app.delete("/api/products/:id", (req, res) => {
-  let products = getProducts();
+app.delete("/api/products/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
 
-  products = products.filter(
-    product => product.id !== Number(req.params.id)
-  );
+    const result = await pool.query(
+      `DELETE FROM products
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
 
-  saveProducts(products);
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Mahsulot topilmadi"
+      });
+    }
 
-  res.json({
-    success: true
-  });
+    res.json({
+      success: true,
+      product: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error("❌ Product o‘chirish xatosi:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Mahsulot o‘chirishda server xatosi"
+    });
+  }
 });
-
 // =====================================================
 // USERS / ACCOUNT
 // =====================================================
