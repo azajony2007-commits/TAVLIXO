@@ -106,20 +106,82 @@ app.delete("/api/products/:id", (req, res) => {
 // USERS / ACCOUNT
 // =====================================================
 
-function getUsers() {
-  return readJSON(USERS_FILE);
+async function getUserByEmail(email) {
+  const result = await pool.query(
+    "SELECT * FROM users WHERE LOWER(email) = LOWER($1)",
+    [email]
+  );
+
+  return result.rows[0] || null;
 }
 
-function saveUsers(users) {
-  writeJSON(USERS_FILE, users);
+async function getUserById(id) {
+  const result = await pool.query(
+    "SELECT * FROM users WHERE id = $1",
+    [id]
+  );
+
+  return result.rows[0] || null;
 }
 
-function getSessions() {
-  return readJSON(SESSIONS_FILE);
+async function createUser(user) {
+  await pool.query(
+    `INSERT INTO users
+      (id, name, surname, phone, address, email, age, password_hash)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [
+      user.id,
+      user.name,
+      user.surname,
+      user.phone,
+      user.address,
+      user.email,
+      user.age,
+      user.passwordHash
+    ]
+  );
 }
 
-function saveSessions(sessions) {
-  writeJSON(SESSIONS_FILE, sessions);
+async function createSession(token, userId) {
+  await pool.query(
+    `INSERT INTO sessions (token, user_id)
+     VALUES ($1, $2)`,
+    [token, userId]
+  );
+}
+
+async function getSession(token) {
+  const result = await pool.query(
+    "SELECT * FROM sessions WHERE token = $1",
+    [token]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function deleteSession(token) {
+  await pool.query(
+    "DELETE FROM sessions WHERE token = $1",
+    [token]
+  );
+}
+
+async function getUserFromRequest(req) {
+  const auth = req.headers.authorization;
+
+  if (!auth || !auth.startsWith("Bearer ")) {
+    return null;
+  }
+
+  const token = auth.replace("Bearer ", "").trim();
+
+  const session = await getSession(token);
+
+  if (!session) {
+    return null;
+  }
+
+  return await getUserById(session.user_id);
 }
 
 // Parolni hash qilish
@@ -136,216 +198,73 @@ function createToken() {
 }
 
 // Authorization orqali foydalanuvchini topish
-function getUserFromRequest(req) {
-  const auth = req.headers.authorization;
 
-  if (!auth || !auth.startsWith("Bearer ")) {
-    return null;
-  }
-
-  const token = auth.replace("Bearer ", "").trim();
-
-  const sessions = getSessions();
-  const session = sessions.find(
-    item => item.token === token
-  );
-
-  if (!session) {
-    return null;
-  }
-
-  const users = getUsers();
-
-  return users.find(
-    user => user.id === session.userId
-  ) || null;
-}
 
 // =====================================================
 // REGISTER
 // =====================================================
 
-app.post("/api/register", (req, res) => {
+app.post("/api/register", async (req, res) => {
+  try {
+    const {
+      name,
+      surname,
+      phone,
+      address,
+      email,
+      age,
+      password
+    } = req.body;
 
-  const {
-    name,
-    surname,
-    phone,
-    address,
-    email,
-    age,
-    password
-  } = req.body;
+    if (
+      !name ||
+      !surname ||
+      !phone ||
+      !address ||
+      !email ||
+      !age ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Barcha ma'lumotlarni kiriting"
+      });
+    }
 
-  if (
-    !name ||
-    !surname ||
-    !phone ||
-    !address ||
-    !email ||
-    !age ||
-    !password
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "Barcha ma'lumotlarni kiriting"
-    });
-  }
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Parol kamida 6 ta belgidan iborat bo‘lsin"
+      });
+    }
 
-  if (password.length < 6) {
-    return res.status(400).json({
-      success: false,
-      message: "Parol kamida 6 ta belgidan iborat bo‘lsin"
-    });
-  }
+    const exists = await getUserByEmail(email);
 
-  const users = getUsers();
+    if (exists) {
+      return res.status(400).json({
+        success: false,
+        message: "Bu email bilan akkaunt mavjud"
+      });
+    }
 
-  const exists = users.find(
-    user =>
-      user.email.toLowerCase() ===
-      email.toLowerCase()
-  );
+    const user = {
+      id: Date.now(),
+      name,
+      surname,
+      phone,
+      address,
+      email,
+      age: Number(age),
+      passwordHash: hashPassword(password)
+    };
 
-  if (exists) {
-    return res.status(400).json({
-      success: false,
-      message: "Bu email bilan akkaunt mavjud"
-    });
-  }
+    await createUser(user);
 
-  const user = {
-    id: Date.now(),
-    name,
-    surname,
-    phone,
-    address,
-    email,
-    age: Number(age),
-    passwordHash: hashPassword(password),
-    createdAt: new Date().toISOString()
-  };
+    const token = createToken();
 
-  users.push(user);
-  saveUsers(users);
+    await createSession(token, user.id);
 
-  const token = createToken();
-
-  const sessions = getSessions();
-
-  sessions.push({
-    token,
-    userId: user.id
-  });
-
-  saveSessions(sessions);
-
-  const safeUser = {
-    id: user.id,
-    name: user.name,
-    surname: user.surname,
-    phone: user.phone,
-    address: user.address,
-    email: user.email,
-    age: user.age
-  };
-
-  res.json({
-    success: true,
-    token,
-    user: safeUser
-  });
-});
-
-// =====================================================
-// LOGIN
-// =====================================================
-
-app.post("/api/login", (req, res) => {
-
-  const {
-    email,
-    password
-  } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: "Email va parolni kiriting"
-    });
-  }
-
-  const users = getUsers();
-
-  const user = users.find(
-    item =>
-      item.email.toLowerCase() ===
-      email.toLowerCase()
-  );
-
-  if (!user) {
-    return res.status(401).json({
-      success: false,
-      message: "Email yoki parol noto‘g‘ri"
-    });
-  }
-
-  if (
-    user.passwordHash !==
-    hashPassword(password)
-  ) {
-    return res.status(401).json({
-      success: false,
-      message: "Email yoki parol noto‘g‘ri"
-    });
-  }
-
-  const token = createToken();
-
-  const sessions = getSessions();
-
-  sessions.push({
-    token,
-    userId: user.id
-  });
-
-  saveSessions(sessions);
-
-  const safeUser = {
-    id: user.id,
-    name: user.name,
-    surname: user.surname,
-    phone: user.phone,
-    address: user.address,
-    email: user.email,
-    age: user.age
-  };
-
-  res.json({
-    success: true,
-    token,
-    user: safeUser
-  });
-});
-
-// =====================================================
-// CURRENT USER
-// =====================================================
-
-app.get("/api/me", (req, res) => {
-
-  const user = getUserFromRequest(req);
-
-  if (!user) {
-    return res.status(401).json({
-      success: false,
-      message: "Akkauntga kirilmagan"
-    });
-  }
-
-  res.json({
-    success: true,
-    user: {
+    const safeUser = {
       id: user.id,
       name: user.name,
       surname: user.surname,
@@ -353,37 +272,155 @@ app.get("/api/me", (req, res) => {
       address: user.address,
       email: user.email,
       age: user.age
+    };
+
+    res.json({
+      success: true,
+      token,
+      user: safeUser
+    });
+
+  } catch (error) {
+    console.error("❌ Register xatosi:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server xatosi"
+    });
+  }
+});
+
+// =====================================================
+// LOGIN
+// =====================================================
+
+app.post("/api/login", async (req, res) => {
+  try {
+    const {
+      email,
+      password
+    } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email va parolni kiriting"
+      });
     }
-  });
+
+    const user = await getUserByEmail(email);
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Email yoki parol noto‘g‘ri"
+      });
+    }
+
+    if (user.password_hash !== hashPassword(password)) {
+      return res.status(401).json({
+        success: false,
+        message: "Email yoki parol noto‘g‘ri"
+      });
+    }
+
+    const token = createToken();
+
+    await createSession(token, user.id);
+
+    const safeUser = {
+      id: user.id,
+      name: user.name,
+      surname: user.surname,
+      phone: user.phone,
+      address: user.address,
+      email: user.email,
+      age: user.age
+    };
+
+    res.json({
+      success: true,
+      token,
+      user: safeUser
+    });
+
+  } catch (error) {
+    console.error("❌ Login xatosi:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server xatosi"
+    });
+  }
+});
+// =====================================================
+// CURRENT USER
+// =====================================================
+
+app.get("/api/me", async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req);
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Akkauntga kirilmagan"
+      });
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        surname: user.surname,
+        phone: user.phone,
+        address: user.address,
+        email: user.email,
+        age: user.age
+      }
+    });
+
+  } catch (error) {
+    console.error("❌ /api/me xatosi:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server xatosi"
+    });
+  }
 });
 
 // =====================================================
 // LOGOUT
 // =====================================================
 
-app.post("/api/logout", (req, res) => {
+app.post("/api/logout", async (req, res) => {
+  try {
+    const auth = req.headers.authorization;
 
-  const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith("Bearer ")) {
+      return res.json({
+        success: true
+      });
+    }
 
-  if (!auth || !auth.startsWith("Bearer ")) {
-    return res.json({
+    const token = auth.replace("Bearer ", "").trim();
+
+    await deleteSession(token);
+
+    res.json({
       success: true
     });
+
+  } catch (error) {
+    console.error("❌ Logout xatosi:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server xatosi"
+    });
   }
-
-  const token = auth.replace("Bearer ", "").trim();
-
-  let sessions = getSessions();
-
-  sessions = sessions.filter(
-    item => item.token !== token
-  );
-
-  saveSessions(sessions);
-
-  res.json({
-    success: true
-  });
 });
 
 // =====================================================
@@ -399,130 +436,191 @@ function saveOrders(orders) {
 }
 
 // Buyurtma qabul qilish
-app.post("/api/orders", (req, res) => {
 
-  const orders = getOrders();
+app.post("/api/orders", async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req);
 
-  const user = getUserFromRequest(req);
+    const order = {
+      id: Date.now(),
 
-  const order = {
-    id: Date.now(),
+      userId: user ? user.id : null,
 
-    userId: user ? user.id : null,
+      name: user
+        ? `${user.name} ${user.surname}`
+        : req.body.name,
 
-    name: user
-      ? `${user.name} ${user.surname}`
-      : req.body.name,
+      phone: user
+        ? user.phone
+        : req.body.phone,
 
-    phone: user
-      ? user.phone
-      : req.body.phone,
+      address: user
+        ? user.address
+        : req.body.address,
 
-    address: user
-      ? user.address
-      : req.body.address,
+      products: req.body.products,
 
-    products: req.body.products,
+      total: Number(req.body.total),
 
-    total: Number(req.body.total),
+      status: "Yangi"
+    };
 
-    status: "Yangi",
+    await pool.query(
+      `INSERT INTO orders
+        (id, user_id, name, phone, address, products, total, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        order.id,
+        order.userId,
+        order.name,
+        order.phone,
+        order.address,
+        JSON.stringify(order.products),
+        order.total,
+        order.status
+      ]
+    );
 
-    createdAt: new Date().toLocaleString("uz-UZ")
-  };
+    res.json({
+      success: true,
+      order
+    });
 
-  orders.push(order);
+  } catch (error) {
+    console.error("❌ Buyurtma xatosi:", error);
 
-  saveOrders(orders);
-
-  res.json({
-    success: true,
-    order
-  });
+    res.status(500).json({
+      success: false,
+      message: "Server xatosi"
+    });
+  }
 });
 
 // Foydalanuvchining buyurtmalari
-app.get("/api/my-orders", (req, res) => {
+app.get("/api/my-orders", async (req, res) => {
+  try {
+    const user = await getUserFromRequest(req);
 
-  const user = getUserFromRequest(req);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Avval akkauntga kiring"
+      });
+    }
 
-  if (!user) {
-    return res.status(401).json({
+    const result = await pool.query(
+      `SELECT *
+       FROM orders
+       WHERE user_id = $1
+       ORDER BY created_at DESC`,
+      [user.id]
+    );
+
+    res.json({
+      success: true,
+      orders: result.rows
+    });
+
+  } catch (error) {
+    console.error("❌ My orders xatosi:", error);
+
+    res.status(500).json({
       success: false,
-      message: "Avval akkauntga kiring"
+      message: "Server xatosi"
     });
   }
-
-  const orders = getOrders();
-
-  const myOrders = orders.filter(
-    order => order.userId === user.id
-  );
-
-  res.json({
-    success: true,
-    orders: myOrders
-  });
 });
 
 // Barcha buyurtmalar
-app.get("/api/orders", (req, res) => {
-  res.json(getOrders());
+app.get("/api/orders", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT *
+       FROM orders
+       ORDER BY created_at DESC`
+    );
+
+    res.json(result.rows);
+
+  } catch (error) {
+    console.error("❌ Orders xatosi:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Server xatosi"
+    });
+  }
 });
 
 // Bitta buyurtmani olish
-app.get("/api/orders/:id", (req, res) => {
+app.get("/api/orders/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
 
-  const orders = getOrders();
+    const result = await pool.query(
+      `SELECT *
+       FROM orders
+       WHERE id = $1`,
+      [id]
+    );
 
-  const id = Number(req.params.id);
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Buyurtma topilmadi"
+      });
+    }
 
-  const order = orders.find(
-    order => order.id === id
-  );
+    res.json({
+      success: true,
+      order: result.rows[0]
+    });
 
-  if (!order) {
-    return res.status(404).json({
+  } catch (error) {
+    console.error("❌ Buyurtma xatosi:", error);
+
+    res.status(500).json({
       success: false,
-      message: "Buyurtma topilmadi"
+      message: "Server xatosi"
     });
   }
-
-  res.json({
-    success: true,
-    order
-  });
 });
 
 // Buyurtma statusini o‘zgartirish
-app.put("/api/orders/:id", (req, res) => {
+app.put("/api/orders/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const status = req.body.status;
 
-  let orders = getOrders();
+    const result = await pool.query(
+      `UPDATE orders
+       SET status = $1
+       WHERE id = $2
+       RETURNING *`,
+      [status, id]
+    );
 
-  const id = Number(req.params.id);
-  const status = req.body.status;
+    if (result.rows.length === 0) {
+      return res.json({
+        success: false,
+        message: "Buyurtma topilmadi"
+      });
+    }
 
-  const order = orders.find(
-    order => order.id === id
-  );
+    res.json({
+      success: true,
+      order: result.rows[0]
+    });
 
-  if (!order) {
-    return res.json({
+  } catch (error) {
+    console.error("❌ Status o‘zgartirish xatosi:", error);
+
+    res.status(500).json({
       success: false,
-      message: "Buyurtma topilmadi"
+      message: "Server xatosi"
     });
   }
-
-  order.status = status;
-
-  saveOrders(orders);
-
-  res.json({
-    success: true,
-    order
-  });
 });
-
 // =====================================================
 // SERVER
 // =====================================================
