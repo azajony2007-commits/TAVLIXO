@@ -683,7 +683,53 @@ app.put("/api/orders/:id", async (req, res) => {
       message: "Server xatosi"
     });
   }
+
 });
+async function migrateProductsToDatabase() {
+  try {
+    if (!fs.existsSync(DATA_FILE)) {
+      console.log("ℹ️ products.json topilmadi");
+      return;
+    }
+
+    const products = readJSON(DATA_FILE);
+
+    if (!Array.isArray(products) || products.length === 0) {
+      console.log("ℹ️ Ko‘chiriladigan mahsulot yo‘q");
+      return;
+    }
+
+    for (const item of products) {
+      const name = item.name || item.n;
+      const price = Number(item.price ?? item.p ?? 0);
+      const country = item.country || item.c || "";
+      const category = item.category || item.k || "";
+      const image = item.image || item.img || "";
+
+      if (!name || !price) continue;
+
+      await pool.query(
+        `INSERT INTO products
+          (id, name, price, country, category, image)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          Number(item.id),
+          name,
+          price,
+          country,
+          category,
+          image
+        ]
+      );
+    }
+
+    console.log("✅ Mahsulotlar PostgreSQL'ga ko‘chirildi");
+
+  } catch (error) {
+    console.error("❌ Products migration xatosi:", error);
+  }
+}
 // =====================================================
 // SERVER
 // =====================================================
@@ -737,10 +783,12 @@ async function initDatabase() {
   }
 }
 
-initDatabase().then(() => {
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(
-      `🚀 TAVLIXO serveri ishga tushdi: http://localhost:${PORT}`
-    );
+initDatabase()
+  .then(() => migrateProductsToDatabase())
+  .then(() => {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(
+        `🚀 TAVLIXO serveri ishga tushdi: http://localhost:${PORT}`
+      );
+    });
   });
-});
