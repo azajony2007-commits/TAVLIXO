@@ -527,8 +527,59 @@ app.put("/api/orders/:id", (req, res) => {
 // SERVER
 // =====================================================
 
-app.listen(PORT, () => {
-  console.log(
-    `TAVLIXO serveri ishga tushdi: http://localhost:${PORT}`
-  );
+async function initDatabase() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id BIGINT PRIMARY KEY,
+        name TEXT NOT NULL,
+        surname TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        address TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        age INTEGER NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS sessions (
+        token TEXT PRIMARY KEY,
+        user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS products (
+        id BIGINT PRIMARY KEY,
+        name TEXT NOT NULL,
+        price NUMERIC NOT NULL,
+        country TEXT,
+        category TEXT,
+        image TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS orders (
+        id BIGINT PRIMARY KEY,
+        user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+        name TEXT,
+        phone TEXT,
+        address TEXT,
+        products JSONB,
+        total NUMERIC NOT NULL,
+        status TEXT DEFAULT 'Yangi',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    console.log("✅ PostgreSQL jadvallari tayyor");
+  } catch (error) {
+    console.error("❌ PostgreSQL xatosi:", error);
+  }
+}
+
+initDatabase().then(() => {
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(
+      `🚀 TAVLIXO serveri ishga tushdi: http://localhost:${PORT}`
+    );
+  });
 });
